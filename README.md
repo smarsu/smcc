@@ -1,0 +1,2 @@
+# smcc
+A simple compiler
