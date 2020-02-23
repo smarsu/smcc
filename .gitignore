@@ -1,3 +1,9 @@
+*.c
+*.py
+*.pyc
+.*
+build
+
 # Prerequisites
 *.d
 
