@@ -488,6 +488,14 @@ void PrintToken::Run() {
     }
   }
 
+  size_t k_pre = k;
+  ++k_pre;
+  for (; k_pre < father_->kids().size(); ++k_pre) {
+    Token *next = father_->kids()[k_pre];
+    Token *next_kid = next->kids()[0];
+    next->SetVar(next_kid->var(), next_kid->size(), next_kid->data_type());
+  }
+
   ++k;
   for (; k < father_->kids().size(); ++k) {
     Token *next = father_->kids()[k];

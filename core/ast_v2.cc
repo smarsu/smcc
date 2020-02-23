@@ -268,7 +268,6 @@ std::vector<std::string> Merge(std::vector<std::string> &tokens) {
 std::vector<std::string> Remove(std::vector<std::string> &tokens) {
   static std::set<std::string> rm = {
     " ",
-    ","
   };
   std::vector<std::string> tokens_kept;
   for (auto &token : tokens) {
@@ -354,18 +353,35 @@ Token *Tree_V2(const std::vector<std::string> &tokens, size_t pos = 0) {
     "print"
   };
 
+  std::vector<int> black_level = {-1, 0};
+
   std::stack<Token *> stk;
 
-  Token *tree = new ListToken("list");
+  Token *tree = new GlobalToken("global");
   stk.push(tree);
   stk.push(new ListToken("list"));
 
   for (size_t t = pos; t < tokens.size(); ++t) {
-    std::string token;
+    std::string token = tokens[t];
 
     if (In(token, std::string("\n"))) {
+      int b_level = token.size() - 1;
+      if (b_level > black_level[black_level.size() - 1]) {
+        black_level.push_back(b_level);
+      }
+
       Token *last = pop(stk);
       stk.top()->push(last);
+
+      if (b_level < black_level[black_level.size() - 1]) {
+        while (b_level <= black_level[black_level.size() - 1]) {
+          Token *last = pop(stk);
+          stk.top()->push(last);
+        
+          black_level.resize(black_level.size() - 1);
+        }
+      }
+
       stk.push(new ListToken("list"));
     }
     else if (token == "(") {
@@ -381,9 +397,18 @@ Token *Tree_V2(const std::vector<std::string> &tokens, size_t pos = 0) {
 
       stk.push(new ListToken("list"));
     }
+    else if (token == ":") {
+      stk.push(new ListToken("list"));
+      stk.push(new ListToken("list"));     
+    }
     else {
       stk.top()->push(ToToken(token));
     }
+  }
+
+  while (stk.size() > 1) {
+    Token *last = pop(stk);
+    stk.top()->push(last);
   }
 
   return tree;
