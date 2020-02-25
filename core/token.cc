@@ -314,6 +314,9 @@ Token *ToToken(const std::string &name) {
   else if (name == "print") {
     token = new PrintToken(name);
   }
+  else if (name == "if") {
+    token = new IfToken(name);
+  }
   // else if (name == "(") {
   //   token = new LeftP1Token(name);
   // }
@@ -424,6 +427,9 @@ void GlobalToken::Run() {
 void ListToken::Run() {
   for (auto *kid : kids_) {
     kid->Run();
+    if (kid->token_type() == TokenType::kIf) {
+      break;
+    }
   }
 }
 
@@ -626,7 +632,59 @@ void GreatThanToken::Run() {
 }
 
 void IfToken::Run() {
-  
+  size_t k = 0;
+  for (; k < father_->kids().size(); ++k) {
+    if (father_->kids()[k] == this) {
+      break;
+    }
+  }
+
+  auto yes = [](Token *token) {
+    DataType dt = token->data_type();
+    void *var = token->var();
+
+    switch (dt) {
+      case DataType::kFloat:
+      {
+        double *data = reinterpret_cast<double *>(var);
+        return *data != 0;
+        break;
+      }
+
+      case DataType::kInt:
+      {
+        int64_t *data = reinterpret_cast<int64_t *>(var);
+        return *data != 0;
+        break;
+      }
+      
+      case DataType::kStr:
+      {
+        return token->size() != 1;
+        break;
+      }
+
+      case DataType::kInvalid:
+        LOG(FATAL) << "Unexpected data type " << static_cast<int>(dt);
+
+      default:
+        LOG(FATAL) << "Unexpected data type " << static_cast<int>(dt);
+    }
+  };
+
+  Token *cond = father_->kids()[k + 1];
+  cond->Run();
+
+  Token *body = father_->kids()[k + 2];
+
+  if (yes(cond)) {
+    body->Run();
+  }
+  else {
+    if (father_->kids().size() >= k + 4) {
+      father_->kids()[k + 3]->Run();
+    }
+  }
 }
 
 };

@@ -108,6 +108,8 @@ class Token {
 
   DataType data_type() { return *data_type_; }
 
+  TokenType token_type() { return token_type_; }
+
   std::string repr();
 
  public:
