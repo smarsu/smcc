@@ -401,6 +401,11 @@ Token *Tree_V2(const std::vector<std::string> &tokens, size_t pos = 0) {
       stk.push(new ListToken("list"));
       stk.push(new ListToken("list"));     
     }
+    else if (token == "def") {
+      Token *last = pop(stk);
+      stk.top()->push(last);
+      stk.push(new FuncToken(token));
+    }
     else {
       stk.top()->push(ToToken(token));
     }

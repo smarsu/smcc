@@ -13,6 +13,7 @@ enum class TokenType : int {
   kInvalid = 0,
   kGlobal,
   kList,
+  kFunc,
   kVar,
   kAssign,
   kConstInt,
@@ -25,6 +26,8 @@ enum class TokenType : int {
   kDiv,
   kGreatThan,
   kIf,
+  kLessThan,
+  kWhile,
 };
 
 enum class DataType : int{
@@ -156,6 +159,13 @@ class ListToken : public Token {
   virtual void Run() override;
 };
 
+class FuncToken : public Token {
+ public:
+  FuncToken(const std::string &name) : Token(name, TokenType::kFunc) {}
+
+  virtual void Run() override;
+};
+
 class VarToken : public Token {
  public:
   VarToken(const std::string &name) : Token(name, TokenType::kVar) {}
@@ -238,6 +248,20 @@ class IfToken : public Token {
   IfToken(const std::string &name) : Token(name, TokenType::kIf) {}
 
   virtual void Run() override;
+};
+
+class LessThanToken :public Token {
+ public:
+  LessThanToken(const std::string &name) : Token(name, TokenType::kLessThan) {}
+
+  virtual void Run() override;
+};
+
+class WhileToken : public Token {
+ public:
+  WhileToken(const std::string &name) : Token(name, TokenType::kWhile) {}
+
+  virtual void Run() override;  
 };
 
 // class AssignToken : Token {

@@ -230,7 +230,7 @@ GreatThan(std::tuple<void *, size_t, DataType> left, std::tuple<void *, size_t, 
       std::get<1>(ret) = sizeof(int64_t);
       std::get<0>(ret) = new char[sizeof(int64_t)];
 
-      int64_t data = *reinterpret_cast<double *>(std::get<0>(left)) / *reinterpret_cast<int64_t *>(std::get<0>(right));
+      int64_t data = *reinterpret_cast<double *>(std::get<0>(left)) > *reinterpret_cast<int64_t *>(std::get<0>(right));
       *reinterpret_cast<int64_t *>(std::get<0>(ret)) = data;
     }
     else if (std::get<2>(right) == DataType::kFloat) {
@@ -238,7 +238,51 @@ GreatThan(std::tuple<void *, size_t, DataType> left, std::tuple<void *, size_t, 
       std::get<1>(ret) = sizeof(int64_t);
       std::get<0>(ret) = new char[sizeof(int64_t)];
 
-      int64_t data = *reinterpret_cast<double *>(std::get<0>(left)) / *reinterpret_cast<double *>(std::get<0>(right));
+      int64_t data = *reinterpret_cast<double *>(std::get<0>(left)) > *reinterpret_cast<double *>(std::get<0>(right));
+      *reinterpret_cast<int64_t *>(std::get<0>(ret)) = data;
+    }
+  }
+
+  return ret;
+}
+
+std::tuple<void *, size_t, DataType> 
+LessThan(std::tuple<void *, size_t, DataType> left, std::tuple<void *, size_t, DataType> right) {
+  std::tuple<void *, size_t, DataType> ret;
+  
+  if (std::get<2>(left) == DataType::kInt) {
+    if (std::get<2>(right) == DataType::kInt) {
+      std::get<2>(ret) = DataType::kInt;
+      std::get<1>(ret) = sizeof(int64_t);
+      std::get<0>(ret) = new char[sizeof(int64_t)];
+
+      int64_t data = *reinterpret_cast<int64_t *>(std::get<0>(left)) < *reinterpret_cast<int64_t *>(std::get<0>(right));
+      *reinterpret_cast<int64_t *>(std::get<0>(ret)) = data;
+    }
+    else if (std::get<2>(right) == DataType::kFloat) {
+      std::get<2>(ret) = DataType::kInt;
+      std::get<1>(ret) = sizeof(int64_t);
+      std::get<0>(ret) = new char[sizeof(int64_t)];
+
+      int64_t data = *reinterpret_cast<int64_t *>(std::get<0>(left)) < *reinterpret_cast<double *>(std::get<0>(right));
+      *reinterpret_cast<int64_t *>(std::get<0>(ret)) = data;
+    }
+  }
+  else if (std::get<2>(left) == DataType::kFloat) {
+    if (std::get<2>(right) == DataType::kInt) {
+      std::get<2>(ret) = DataType::kInt;
+      std::get<1>(ret) = sizeof(int64_t);
+      std::get<0>(ret) = new char[sizeof(int64_t)];
+
+      int64_t data = *reinterpret_cast<double *>(std::get<0>(left)) < *reinterpret_cast<int64_t *>(std::get<0>(right));
+      *reinterpret_cast<int64_t *>(std::get<0>(ret)) = data;
+    }
+    else if (std::get<2>(right) == DataType::kFloat) {
+      std::get<2>(ret) = DataType::kInt;
+      std::get<1>(ret) = sizeof(int64_t);
+      std::get<0>(ret) = new char[sizeof(int64_t)];
+
+      int64_t data = *reinterpret_cast<double *>(std::get<0>(left)) < *reinterpret_cast<double *>(std::get<0>(right));
       *reinterpret_cast<int64_t *>(std::get<0>(ret)) = data;
     }
   }
@@ -317,6 +361,9 @@ Token *ToToken(const std::string &name) {
   else if (name == "if") {
     token = new IfToken(name);
   }
+  else if (name == "while") {
+    token = new WhileToken(name);
+  }
   // else if (name == "(") {
   //   token = new LeftP1Token(name);
   // }
@@ -349,6 +396,9 @@ Token *ToToken(const std::string &name) {
   }
   else if (name == ">") {
     token = new GreatThanToken(name);
+  }
+  else if (name == "<") {
+    token = new LessThanToken(name);
   }
   else {
     LOG(FATAL) << "Unexpected token " << name;
@@ -427,7 +477,8 @@ void GlobalToken::Run() {
 void ListToken::Run() {
   for (auto *kid : kids_) {
     kid->Run();
-    if (kid->token_type() == TokenType::kIf) {
+    if (kid->token_type() == TokenType::kIf ||
+        kid->token_type() == TokenType::kWhile) {
       break;
     }
   }
@@ -631,6 +682,61 @@ void GreatThanToken::Run() {
   father_->SetVar(std::get<0>(ret), std::get<1>(ret), std::get<2>(ret));
 }
 
+void LessThanToken::Run() {
+  size_t k = 0;
+  for (; k < father_->kids().size(); ++k) {
+    if (father_->kids()[k] == this) {
+      break;
+    }
+  }
+
+  Token *left = father_->kids()[k - 1];
+  Token *right = father_->kids()[k + 1];
+
+  right->Run();
+
+  std::tuple<void *, size_t, DataType> lelf_tp(left->var(), left->size(), left->data_type());
+  std::tuple<void *, size_t, DataType> right_tp(right->var(), right->size(), right->data_type());
+  auto ret = LessThan(lelf_tp, right_tp);
+
+  father_->SetVar(std::get<0>(ret), std::get<1>(ret), std::get<2>(ret));
+}
+
+bool Yes(Token *token) {
+  DataType dt = token->data_type();
+  void *var = token->var();
+
+  switch (dt) {
+    case DataType::kFloat:
+    {
+      double *data = reinterpret_cast<double *>(var);
+      return *data != 0;
+      break;
+    }
+
+    case DataType::kInt:
+    {
+      int64_t *data = reinterpret_cast<int64_t *>(var);
+      return *data != 0;
+      break;
+    }
+    
+    case DataType::kStr:
+    {
+      return token->size() != 1;
+      break;
+    }
+
+    case DataType::kInvalid:
+      LOG(FATAL) << "Unexpected data type " << static_cast<int>(dt);
+      return false;
+
+    default:
+      LOG(FATAL) << "Unexpected data type " << static_cast<int>(dt);
+      return false;
+  }
+};
+
 void IfToken::Run() {
   size_t k = 0;
   for (; k < father_->kids().size(); ++k) {
@@ -639,45 +745,12 @@ void IfToken::Run() {
     }
   }
 
-  auto yes = [](Token *token) {
-    DataType dt = token->data_type();
-    void *var = token->var();
-
-    switch (dt) {
-      case DataType::kFloat:
-      {
-        double *data = reinterpret_cast<double *>(var);
-        return *data != 0;
-        break;
-      }
-
-      case DataType::kInt:
-      {
-        int64_t *data = reinterpret_cast<int64_t *>(var);
-        return *data != 0;
-        break;
-      }
-      
-      case DataType::kStr:
-      {
-        return token->size() != 1;
-        break;
-      }
-
-      case DataType::kInvalid:
-        LOG(FATAL) << "Unexpected data type " << static_cast<int>(dt);
-
-      default:
-        LOG(FATAL) << "Unexpected data type " << static_cast<int>(dt);
-    }
-  };
-
   Token *cond = father_->kids()[k + 1];
   cond->Run();
 
   Token *body = father_->kids()[k + 2];
 
-  if (yes(cond)) {
+  if (Yes(cond)) {
     body->Run();
   }
   else {
@@ -685,6 +758,27 @@ void IfToken::Run() {
       father_->kids()[k + 3]->Run();
     }
   }
+}
+
+void WhileToken::Run() {
+  size_t k = 0;
+  for (; k < father_->kids().size(); ++k) {
+    if (father_->kids()[k] == this) {
+      break;
+    }
+  }
+
+  Token *cond = father_->kids()[k + 1];
+  Token *body = father_->kids()[k + 2];
+  do {
+    cond->Run();
+    if (Yes(cond)) {
+      body->Run();
+    }
+    else {
+      break;
+    }
+  } while(true);
 }
 
 };

@@ -1,3 +1,13 @@
+def add(x, y):
+  return x + y
+
 i = 1
-if i > 2:
+if i > 0:
+  i = i + 1
   print(i)
+
+j = 0
+while j < 10:
+  j = j + 1
+  i = i + j
+print(i)
