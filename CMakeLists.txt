@@ -4,7 +4,7 @@ include_directories(/usr/local/include)
 link_directories(/usr/local/lib)
 
 add_compile_options(-std=c++11)
-add_compile_options(-O3)
+add_compile_options(-O0)
 add_compile_options(-Wall)
 add_compile_options(-Werror)
 add_compile_options(-g)

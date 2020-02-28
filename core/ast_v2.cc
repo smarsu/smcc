@@ -233,7 +233,7 @@ std::vector<std::string> Merge(std::vector<std::string> &tokens) {
       std::string token = tokens[t];
 
       if (find) {
-        if (token.size() == 1 && ((token[0] >= '0' && token[0] <= '9') || token[0] == '.')) {
+        if (token.size() == 1 && ((token[0] >= '0' && token[0] <= '9') || token[0] == '.' || token[0] == '-')) {
           integer += token;
         }
         else {
@@ -245,7 +245,7 @@ std::vector<std::string> Merge(std::vector<std::string> &tokens) {
         }
       }
       else {
-        if (token.size() == 1 && ((token[0] >= '0' && token[0] <= '9') || token[0] == '.')) {
+        if (token.size() == 1 && ((token[0] >= '0' && token[0] <= '9') || token[0] == '.' || token[0] == '-')) {
           integer = token;
           find = true;
         }
@@ -278,81 +278,45 @@ std::vector<std::string> Remove(std::vector<std::string> &tokens) {
   return std::move(tokens_kept);
 }
 
-Token *Tree(const std::vector<std::string> &tokens) {
-  Token *tree = new GlobalToken("global");
+std::vector<std::string> Prepare(std::vector<std::string> &tokens, int pos = 0) {
+  size_t left, right;
+  size_t count = 0;
 
-  std::stack<Token *> stk;
-  stk.push(tree);
-
-  Token *node = new ListToken("list");
-  stk.push(node);
-
-  std::vector<int> black_level = {-1, 0};
-  for (size_t t = 0; t < tokens.size(); ++t) {
+  bool find = false;
+  for (size_t t = pos; t < tokens.size(); ++t) {
     std::string token = tokens[t];
 
-    if (In(token, std::string("\n"))) {
-      int b_level = token.size() - 1;
-
-      if (b_level > black_level[black_level.size() - 1]) {
-        stk.push(new ListToken("list"));
-
-        black_level.push_back(b_level);
+    if (find) {
+      if (token == "(") {
+        ++count;
       }
-      else if (b_level == black_level[black_level.size() - 1]) {
-        auto last = pop(stk);
-        stk.top()->push(last);
+      if (token == ")") {
+        --count;
 
-        Token *node = new ListToken("list");
-        stk.push(node);
-      }
-      else {
-        CHECK(In(black_level, b_level));
+        if (count == 0) {
+          right = t + 1;
 
-        while (b_level <= black_level[black_level.size() - 1]) {
-          auto last = pop(stk);
-          stk.top()->push(last);
-
-          black_level.resize(black_level.size() - 1); 
+          tokens.insert(tokens.begin() + right, std::string(")"));
+          tokens.insert(tokens.begin() + left, std::string("("));
+          return Prepare(tokens, right);
         }
-        black_level.push_back(b_level);
-
-        Token *node = new ListToken("list");
-        stk.push(node);
       }
-    } 
-    else if (token == "(") {      
-      // Token *last = stk.top()->pop();
-      // stk.push(last);
-      stk.push(new ListToken("list"));
-    }
-    else if (token == ")") {
-      Token *last = pop(stk);
-      stk.top()->push(last);
-    }
-    else if (token == "if") {
-      stk.top()->push(ToToken(token));
-      stk.push(new ListToken("list"));
-    }
-    else if (token == ":") {
-      Token *cond = pop(stk);
-      Token *iftoken = stk.top()->pop();
-      stk.push(iftoken);
-      stk.top()->push(cond);
     }
     else {
-      stk.top()->push(ToToken(token));
+      if (t > 0 && token == "(" && IsVar(tokens[t - 1])) {
+        left = t - 1;
+        find = true;
+        ++count;
+      }
     }
   }
 
-  return tree;
+  CHECK_EQ(find, false);
+
+  return tokens;
 }
 
 Token *Tree_V2(const std::vector<std::string> &tokens, size_t pos = 0) {
-  static std::set<std::string> funcs = {
-    "print"
-  };
-
   std::vector<int> black_level = {-1, 0};
 
   std::stack<Token *> stk;
@@ -361,10 +325,14 @@ Token *Tree_V2(const std::vector<std::string> &tokens, size_t pos = 0) {
   stk.push(tree);
   stk.push(new ListToken("list"));
 
+  size_t under_left = 0;
+
   for (size_t t = pos; t < tokens.size(); ++t) {
     std::string token = tokens[t];
 
     if (In(token, std::string("\n"))) {
+      if (under_left != 0) continue;
+
       int b_level = token.size() - 1;
       if (b_level > black_level[black_level.size() - 1]) {
         black_level.push_back(b_level);
@@ -380,16 +348,22 @@ Token *Tree_V2(const std::vector<std::string> &tokens, size_t pos = 0) {
         
           black_level.resize(black_level.size() - 1);
         }
+
+        black_level.push_back(b_level);
       }
 
       stk.push(new ListToken("list"));
     }
     else if (token == "(") {
       stk.push(new ListToken("list"));
+      
+      ++under_left;
     }
     else if (token == ")") {
       Token *last = pop(stk);
       stk.top()->push(last);
+
+      --under_left;
     }
     else if (token == ",") {
       Token *last = pop(stk);
@@ -401,10 +375,22 @@ Token *Tree_V2(const std::vector<std::string> &tokens, size_t pos = 0) {
       stk.push(new ListToken("list"));
       stk.push(new ListToken("list"));     
     }
-    else if (token == "def") {
+    else if (token == "[") {
+      stk.push(stk.top()->pop());
+      stk.push(new ArrayToken("Array"));
+      stk.push(new ListToken("list"));
+
+      ++under_left;
+    }
+    else if (token == "]") {
       Token *last = pop(stk);
       stk.top()->push(last);
-      stk.push(new FuncToken(token));
+      last = pop(stk);
+      stk.top()->push(last);
+      last = pop(stk);
+      stk.top()->push(last);
+
+      --under_left;
     }
     else {
       stk.top()->push(ToToken(token));
@@ -465,6 +451,8 @@ void AST::ParseV2(const std::string &filename, bool S) {
   tokens = Merge(tokens);
 
   tokens = Remove(tokens);
+
+  tokens = Prepare(tokens);
 
   for (auto token : tokens) {
     LOG(INFO) << token;

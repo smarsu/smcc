@@ -28,6 +28,9 @@ enum class TokenType : int {
   kIf,
   kLessThan,
   kWhile,
+  kDef,
+  kReturn,
+  kArray,
 };
 
 enum class DataType : int{
@@ -35,6 +38,7 @@ enum class DataType : int{
   kInt,
   kFloat,
   kStr,
+  kArray,
 };
 
 class Token;
@@ -89,6 +93,7 @@ class Token {
   virtual void Run() {};
 
   void Resize(size_t size) {
+    if (size == *size_) return;
     if (*var_) {
       // delete *var_; 
     }
@@ -100,6 +105,10 @@ class Token {
     Resize(size);
     std::memcpy(*var_, ptr, size);
     *data_type_ = data_type;
+  }
+
+  void SetVar(Token *other) {
+    SetVar(other->var(), other->size(), other->data_type());
   }
 
   ~Token() {}
@@ -115,6 +124,18 @@ class Token {
 
   std::string repr();
 
+
+  Token *left(size_t offset = 0) {
+    size_t k = 0;
+    for (; k < father_->kids().size(); ++k) {
+      if (father_->kids()[k] == this) {
+        break;
+      }
+    }
+
+    return father_->kids()[k - 1 - offset];
+  }
+
  public:
   void push(Token *node) { 
     kids_.push_back(node); 
@@ -127,6 +148,8 @@ class Token {
 
  public:
   std::vector<Token *> &kids() { return kids_; }
+
+  Token *father() { return father_; }
 
   std::string name() { return name_; }
 
@@ -171,6 +194,8 @@ class VarToken : public Token {
   VarToken(const std::string &name) : Token(name, TokenType::kVar) {}
 
   virtual void Prepare() override;
+
+  virtual void Run() override;
 };
 
 class AssignToken : public Token {
@@ -264,41 +289,25 @@ class WhileToken : public Token {
   virtual void Run() override;  
 };
 
-// class AssignToken : Token {
-//  public:
-//   AssignToken(const std::string &name) : Token(name, TokenType::kAssign) {}
+class DefToken : public Token {
+ public:
+  DefToken(const std::string &name) : Token(name, TokenType::kDef) {}
 
-//   virtual size_t Build(const std::vector<std::string> tokens,
-//                        size_t pos) override {
-    
-//   }
-// };
+  virtual void Prepare() override;
+};
 
-// class IfToken : Token {
-//  public:
-//   IfToken(const std::string &name) : Token(name, TokenType::kIf) {}
+class ReturnToken : public Token {
+ public:
+  ReturnToken(const std::string &name) : Token(name, TokenType::kReturn) {}
 
-//   virtual size_t Build(const std::vector<std::string> tokens, 
-//                        size_t pos) override {
-//     auto next = NextLine(pos);
-//     condition = Tree(std::get<0>(next));
+  virtual void Run() override;
+};
 
-//     next = NextLevel(std::get<2>(next));
-//     body = Tree(std::get<0>(next));
+class ArrayToken : public Token {
+ public:
+  ArrayToken(const std::string &name) : Token(name, TokenType::kArray) {}
 
-//     return next;
-//   }
-
-//   virtual void Run() override {
-//     condition->Run();
-//     if (condition->value()) {
-//       body->Run();
-//     }
-//   }
-
-//  private:
-//   Token *condition{nullptr};
-//   Token *body{nullptr};
-// };
+  virtual void Run() override;
+};
 
 };

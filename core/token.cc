@@ -8,6 +8,9 @@
 namespace smcc {
 
 static std::map<std::string, std::tuple<void **, size_t *, DataType *>> var_map;
+static std::map<std::string, Token *> func_map;
+static bool touch_return = false;
+static Token *func_ptr = nullptr;
 
 std::tuple<void *, size_t, DataType> 
 Add(std::tuple<void *, size_t, DataType> left, std::tuple<void *, size_t, DataType> right) {
@@ -290,6 +293,35 @@ LessThan(std::tuple<void *, size_t, DataType> left, std::tuple<void *, size_t, D
   return ret;
 }
 
+template <typename T>
+T value(Token *token) {
+  DataType data_type = token->data_type();
+  void *var = token->var();
+
+  switch(data_type) {
+    case DataType::kInt:
+    {
+      int64_t data = *reinterpret_cast<int64_t *>(var);
+      return static_cast<T>(data);
+    }
+
+    case DataType::kFloat:
+    {
+      double data = *reinterpret_cast<double *>(var);
+      return static_cast<T>(data);
+    }
+
+    case DataType::kArray:
+    {
+      double data = *reinterpret_cast<double *>(var);
+      return static_cast<T>(data);
+    }
+
+    default:
+      LOG(FATAL) << "Unexpected data type ";
+  }
+}
+
 template <typename T, typename D>
 bool In(const T &cont, const D &v) {
   return cont.find(v) != cont.end();
@@ -307,7 +339,7 @@ bool IsVar(const std::string &token);
 
 bool IsInt(const std::string &token) {
   for (auto c : token) {
-    if (c >= '0' && c <= '9') {}
+    if ((c >= '0' && c <= '9') || c == '-') {}
     else {
       return false; 
     }
@@ -317,7 +349,7 @@ bool IsInt(const std::string &token) {
 
 bool IsFloat(const std::string &token) {
   for (auto c : token) {
-    if ((c >= '0' && c <= '9') || c == '.') {}
+    if ((c >= '0' && c <= '9') || c == '.' || c == '-') {}
     else {
       return false; 
     }
@@ -346,42 +378,6 @@ Token *ToToken(const std::string &name) {
   if (name == "=") {
     token = new AssignToken(name);
   }
-  // else if (name == "if") {
-  //   token = new IfToken(name);
-  // }
-  // else if (name == "<") {
-  //   token = new LessThanToken(name);
-  // }
-  // else if (name == ":") {
-  //   token = new ColonToken(name);
-  // }
-  else if (name == "print") {
-    token = new PrintToken(name);
-  }
-  else if (name == "if") {
-    token = new IfToken(name);
-  }
-  else if (name == "while") {
-    token = new WhileToken(name);
-  }
-  // else if (name == "(") {
-  //   token = new LeftP1Token(name);
-  // }
-  // else if (name == ")") {
-  //   token = new RightP1Token(name);
-  // }
-  else if (IsVar(name)) {
-    token = new VarToken(name);
-  }
-  else if (IsInt(name)) {
-    token = new ConstIntToken(name);
-  }
-  else if (IsFloat(name)) {
-    token = new ConstFloatToken(name);
-  }
-  else if (IsStr(name)) {
-    token = new ConstStrToken(name);
-  }
   else if (name == "+") {
     token = new AddToken(name);
   }
@@ -400,6 +396,33 @@ Token *ToToken(const std::string &name) {
   else if (name == "<") {
     token = new LessThanToken(name);
   }
+  else if (name == "print") {
+    token = new PrintToken(name);
+  }
+  else if (name == "if") {
+    token = new IfToken(name);
+  }
+  else if (name == "while") {
+    token = new WhileToken(name);
+  }
+  else if (name == "def") {
+    token = new DefToken(name);
+  }
+  else if (name == "return") {
+    token = new ReturnToken(name);
+  }
+  else if (IsVar(name)) {
+    token = new VarToken(name);
+  }
+  else if (IsInt(name)) {
+    token = new ConstIntToken(name);
+  }
+  else if (IsFloat(name)) {
+    token = new ConstFloatToken(name);
+  }
+  else if (IsStr(name)) {
+    token = new ConstStrToken(name);
+  }
   else {
     LOG(FATAL) << "Unexpected token " << name;
   }
@@ -413,6 +436,13 @@ std::string Token::repr() {
 
   switch (*data_type_) {
     case DataType::kFloat:
+    {
+      double *data = reinterpret_cast<double *>(*var_);
+      s = std::to_string(*data);
+      break;
+    }
+
+    case DataType::kArray:
     {
       double *data = reinterpret_cast<double *>(*var_);
       s = std::to_string(*data);
@@ -475,14 +505,21 @@ void GlobalToken::Run() {
 }
 
 void ListToken::Run() {
+  if (touch_return) {
+    return;
+  }
+
   for (auto *kid : kids_) {
     kid->Run();
     if (kid->token_type() == TokenType::kIf ||
-        kid->token_type() == TokenType::kWhile) {
+        kid->token_type() == TokenType::kWhile ||
+        kid->token_type() == TokenType::kDef) {
       break;
     }
   }
 }
+
+void FuncToken::Run() {}
 
 void VarToken::Prepare() {
   if (In(var_map, name_)) {
@@ -499,20 +536,68 @@ void VarToken::Prepare() {
   }
 }
 
-void AssignToken::Run() {
-  size_t k = 0;
-  for (; k < father_->kids().size(); ++k) {
-    if (father_->kids()[k] == this) {
-      break;
+void VarToken::Run() {
+  if (In(func_map, name_)) {
+    func_ptr = father_;
+
+    Token *func  = func_map[name_];
+
+    for (size_t i = 1; i < father_->kids().size(); ++i) {
+      Token *kid = father_->kids()[i]->kids()[0];
+      Token *param = func->father()->kids()[i]->kids()[0];
+      param->SetVar(kid->var(), kid->size(), kid->data_type());
     }
+
+    // Token *def = func->father()->father();
+    // def->kids()[1]->Run();
+    func->father()->father()->kids()[2]->Run();
+
+    touch_return = false;
+    func_ptr = nullptr;
   }
+  else if (kids_.size() > 0) {
+    CHECK(kids_.size() == 1);
+    kids_[0]->Run();
+    CHECK(kids_[0]->size() == sizeof(double));
 
-  Token *left = father_->kids()[k - 1];
-  Token *right = father_->kids()[k + 1];
+    int64_t index = value<int64_t>(kids_[0]);
 
-  right->Run();
+    double **ptr = reinterpret_cast<double **>(std::get<0>(var_map[name_]));
 
-  left->SetVar(right->var(), right->size(), right->data_type());
+    var_ = new void*;
+    size_ = new size_t;
+    data_type_ = new DataType;
+
+    *var_ = *ptr + index;
+    *size_ = sizeof(double);
+    *data_type_ = DataType::kFloat;
+  }
+}
+
+void AssignToken::Run() {
+  CHECK(kids_.size() == 1 || kids_.size() == 0);
+
+  if (kids_.size() == 1) {
+    Token *kid = kids_[0];
+    kid->Run();
+    left()->SetVar(kid);
+  }
+  else {
+    size_t k = 0;
+    for (; k < father_->kids().size(); ++k) {
+      if (father_->kids()[k] == this) {
+        break;
+      }
+    }
+
+    Token *left = father_->kids()[k - 1];
+    Token *right = father_->kids()[k + 1];
+
+    // left->Run();
+    right->Run();
+
+    left->SetVar(right->var(), right->size(), right->data_type());
+  }
 }
 
 void ConstIntToken::Prepare() {
@@ -533,7 +618,7 @@ void ConstFloatToken::Prepare() {
   size_ = new size_t(sizeof(double));
   data_type_ = new DataType(DataType::kFloat);
 
-  double data = std::atoi(name_.c_str());
+  double data = std::atof(name_.c_str());
   SetVar(&data, *size_, *data_type_);
 }
 
@@ -550,6 +635,7 @@ void PrintToken::Run() {
   for (; k_pre < father_->kids().size(); ++k_pre) {
     Token *next = father_->kids()[k_pre];
     Token *next_kid = next->kids()[0];
+    next->Run();
     next->SetVar(next_kid->var(), next_kid->size(), next_kid->data_type());
   }
 
@@ -560,15 +646,6 @@ void PrintToken::Run() {
     std::cout << next->repr() << " ";
   }
   std::cout << std::endl;
-
-  // Token *right = father_->kids()[k + 1];
-
-  // for (auto *kid : right->kids()) {
-  //   kid->Run();
-  //   std::cout << kid->repr();
-  //   std::cout << " ";
-  // }
-  // std::cout << std::endl;
 }
 
 void ConstStrToken::Prepare() {
@@ -593,6 +670,7 @@ void AddToken::Run() {
   Token *left = father_->kids()[k - 1];
   Token *right = father_->kids()[k + 1];
 
+  // left->Run();
   right->Run();
 
   std::tuple<void *, size_t, DataType> lelf_tp(left->var(), left->size(), left->data_type());
@@ -779,6 +857,53 @@ void WhileToken::Run() {
       break;
     }
   } while(true);
+}
+
+void DefToken::Prepare() {
+  size_t k = 0;
+  for (; k < father_->kids().size(); ++k) {
+    if (father_->kids()[k] == this) {
+      break;
+    }
+  }
+
+  Token *right = father_->kids()[k + 1];
+  Token *func = right->kids()[0];
+
+  CHECK(TokenType::kVar == func->token_type());
+
+  func_map[func->name()] = func;
+}
+
+void ReturnToken::Run() {
+  size_t k = 0;
+  for (; k < father_->kids().size(); ++k) {
+    if (father_->kids()[k] == this) {
+      break;
+    }
+  }
+
+  Token *right = father_->kids()[k + 1];
+
+  right->Run();
+  func_ptr->SetVar(right->var(), right->size(), right->data_type());
+
+  touch_return = true;
+}
+
+void ArrayToken::Run() {
+  size_t size = sizeof(double) * kids_.size();
+  double *ptr = new double[kids_.size()];
+
+  std::vector<double> datas;
+  for (auto *kid : kids_) {
+    double v = value<double>(kid->kids()[0]);
+    datas.push_back(v);
+  }
+  std::memcpy(ptr, datas.data(), size);
+
+  SetVar(ptr, size, DataType::kArray);
+  // delete[] ptr;
 }
 
 };
